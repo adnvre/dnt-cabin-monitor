@@ -167,17 +167,22 @@ def main() -> int:
             openings[cid] = (cabin, new)
         cabin_states[cid] = available
 
-    # Ingen tidsstempel her: da endres state.json bare når ledigheten endres (og én gang i døgnet).
-    state = {"checked_until": end.isoformat(), "cabins": cabin_states}
-    STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
+    ok = True
     if openings:
         subject, body = build_email(openings)
         print(body)
-        send_email(subject, body)
+        ok = send_email(subject, body)
+        if not ok:
+            # Ikke lagre åpningene som "sett", så de varsles ved neste kjøring.
+            for cid, (_, new) in openings.items():
+                cabin_states[cid] = sorted(set(cabin_states[cid]) - set(new))
     else:
         print("Ingen nye ledige netter.")
-    return 0
+
+    # Ingen tidsstempel her: da endres state.json bare når ledigheten endres (og én gang i døgnet).
+    state = {"checked_until": end.isoformat(), "cabins": cabin_states}
+    STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

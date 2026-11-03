@@ -44,6 +44,7 @@ jobs:
         run: python monitor.py
 
       - name: Commit updated state
+        if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
