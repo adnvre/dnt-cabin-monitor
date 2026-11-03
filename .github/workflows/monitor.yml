@@ -2,8 +2,8 @@ name: DNT Cabin Monitor
 
 on:
   schedule:
-    # Hvert 15. minutt (UTC). GitHub kan forsinke planlagte kjøringer noe.
-    - cron: '*/15 * * * *'
+    # Hver 4. time (UTC). GitHub kan forsinke planlagte kjøringer noe.
+    - cron: '7 */4 * * *'
   workflow_dispatch:
     inputs:
       test_email:

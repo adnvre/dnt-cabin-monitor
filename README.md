@@ -1,12 +1,12 @@
 # DNT-hytteovervåker
 
-Sjekker DNT-hyttene i `cabins.json` hvert 15. minutt og sender e-post når en natt som var booket blir ledig (f.eks. ved avbestilling).
+Sjekker DNT-hyttene i `cabins.json` hver 4. time og sender e-post når en natt som var booket blir ledig (f.eks. ved avbestilling).
 
 Inspirert av [deagjerde/dnt-cabin-monitor](https://github.com/deagjerde/dnt-cabin-monitor), men skrevet i Python og bruker DNT sitt kalender-API, så det blir ett kall per hytte i stedet for ett per natt.
 
 ## Slik virker det
 
-1. GitHub Actions kjører `monitor.py` hvert 15. minutt.
+1. GitHub Actions kjører `monitor.py` hver 4. time.
 2. For hver hytte hentes ledighet ~13 måneder frem fra `https://hyttebestilling.dnt.no/api/booking/availability-calendar`.
 3. Resultatet sammenlignes med `state.json`. Nye ledige netter gir én samlet e-post.
 4. `state.json` committes tilbake bare når ledigheten har endret seg.
