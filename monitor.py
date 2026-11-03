@@ -28,7 +28,13 @@ STATE_FILE = ROOT / "state.json"
 API_URL = "https://hyttebestilling.dnt.no/api/booking/availability-calendar"
 CABIN_URL = "https://hyttebestilling.dnt.no/hytte/{id}"
 USER_AGENT = "Mozilla/5.0 (compatible; DNT-Monitor/1.0)"
-DAYS_AHEAD = 400  # ca. 13 måneder
+# DNT åpner booking for neste år rundt første arbeidsdag i november, til og med
+# nyttårsaften året etter. Fra RELEASE_WATCH_MONTH ser vi derfor også på neste år.
+# (API-et takler ca. 15 måneder; to år gir feil.)
+RELEASE_WATCH_MONTH = 10
+# Åpner flere netter enn dette samtidig for én hytte, regnes det som at et nytt
+# bookingår er sluppet, og vi sender en oppsummering i stedet for en lang liste.
+RELEASE_THRESHOLD = 30
 INCLUDE_FRIDAY = True  # varsle også om fredag–lørdag
 
 NO_MONTHS = [
@@ -95,6 +101,11 @@ def night_label(d: date) -> str | None:
     return None
 
 
+def window_end(today: date) -> date:
+    year = today.year + 1 if today.month >= RELEASE_WATCH_MONTH else today.year
+    return date(year, 12, 31)
+
+
 def next_saturday(d: date) -> date:
     return d + timedelta(days=(5 - d.weekday()) % 7 or 7)
 
@@ -155,21 +166,35 @@ def send_email(subject: str, body: str) -> bool:
     return True
 
 
-def build_email(openings: dict[str, tuple[dict, list[str]]]) -> tuple[str, str]:
-    total = sum(len(dates) for _, dates in openings.values())
+def format_line(d: str) -> str:
+    night = date.fromisoformat(d)
+    return f"  - {format_night(night)} ({night_label(night)})"
+
+
+def build_email(openings: dict[str, tuple[dict, list[str]]], released: set[str] = frozenset()) -> tuple[str, str]:
     names = ", ".join(cabin["name"] for cabin, _ in openings.values())
-    subject = f"DNT: {total} ny(e) ledig(e) natt/netter – {names}"
+    if released:
+        subject = f"DNT: Booking har åpnet – {names}"
+    else:
+        total = sum(len(dates) for _, dates in openings.values())
+        subject = f"DNT: {total} ny(e) ledig(e) natt/netter – {names}"
 
     parts = []
-    for cabin, dates in openings.values():
-        lines = "\n".join(
-            f"  - {format_night(date.fromisoformat(d))} ({night_label(date.fromisoformat(d))})"
-            for d in dates
-        )
-        parts.append(
-            f"{cabin['name']} ({len(dates)} ny(e)):\n{lines}\n"
-            f"Bestill her: {CABIN_URL.format(id=cabin['id'])}\n"
-        )
+    for cid, (cabin, dates) in openings.items():
+        link = f"Bestill her: {CABIN_URL.format(id=cabin['id'])}\n"
+        if cid in released:
+            holidays = [d for d in dates if not night_label(date.fromisoformat(d)).startswith("helg ")]
+            weekends = len(dates) - len(holidays)
+            text = (
+                f"{cabin['name']}: ny bookingperiode har åpnet, med {weekends} ledige helgenetter"
+                f" og {len(holidays)} netter før helligdager.\n"
+            )
+            if holidays:
+                text += "Helligdager:\n" + "\n".join(format_line(d) for d in holidays) + "\n"
+            parts.append(text + link)
+        else:
+            lines = "\n".join(format_line(d) for d in dates)
+            parts.append(f"{cabin['name']} ({len(dates)} ny(e)):\n{lines}\n{link}")
     body = "\n".join(parts) + "\n--\nSendt automatisk av dnt-cabin-monitor."
     return subject, body
 
@@ -202,10 +227,11 @@ def main() -> int:
     prev_until = state.get("checked_until", "")
 
     today = date.today()
-    end = today + timedelta(days=DAYS_AHEAD)
+    end = window_end(today)
     print(f"Sjekker {len(cabins)} hytte(r) fra {today} til {end}")
 
     openings: dict[str, tuple[dict, list[str]]] = {}
+    released: set[str] = set()
     for cabin in cabins:
         cid = str(cabin["id"])
         try:
@@ -223,18 +249,24 @@ def main() -> int:
             # Bare datoer som var innenfor forrige vindu teller; datoer som
             # nettopp har rullet inn i slutten av vinduet er ikke "avbestillinger".
             new = sorted(d for d in set(available) - set(prev or []) if d <= prev_until)
-        for d in new:
-            label = night_label(date.fromisoformat(d))
-            print(f"    [NY] {d} ({label or 'ikke helg/helligdag, ignoreres'})")
+        if len(new) > RELEASE_THRESHOLD:
+            print(f"    {len(new)} nye netter samtidig – regnes som ny bookingperiode.")
+            released.add(cid)
+        else:
+            for d in new:
+                label = night_label(date.fromisoformat(d))
+                print(f"    [NY] {d} ({label or 'ikke helg/helligdag, ignoreres'})")
         # state.json lagrer alle ledige netter, men vi varsler bare om helger/helligdager.
         new = [d for d in new if night_label(date.fromisoformat(d))]
         if new:
             openings[cid] = (cabin, new)
+        else:
+            released.discard(cid)
         cabin_states[cid] = available
 
     ok = True
     if openings:
-        subject, body = build_email(openings)
+        subject, body = build_email(openings, released)
         print(body)
         ok = send_email(subject, body)
         if not ok:

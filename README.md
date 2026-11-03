@@ -7,7 +7,7 @@ Inspirert av [deagjerde/dnt-cabin-monitor](https://github.com/deagjerde/dnt-cabi
 ## Slik virker det
 
 1. GitHub Actions kjører `monitor.py` hvert 30. minutt.
-2. For hver hytte hentes ledighet ~13 måneder frem fra `https://hyttebestilling.dnt.no/api/booking/availability-calendar`.
+2. For hver hytte hentes ledighet til og med 31.12. i år fra `https://hyttebestilling.dnt.no/api/booking/availability-calendar`. Fra oktober tas også neste år med (se under).
 3. Resultatet sammenlignes med `state.json`. Nye ledige netter gir én samlet e-post.
 4. `state.json` committes tilbake bare når ledigheten har endret seg.
 
@@ -20,6 +20,10 @@ Bare netter du faktisk vil ha:
 - **natten før en norsk helligdag**: avreise dagen før, hjemreise på helligdagen. Gjelder nyttårsdag, skjærtorsdag, langfredag, 1. og 2. påskedag, 1. mai, 17. mai, Kristi himmelfartsdag, 1. og 2. pinsedag, og 1. og 2. juledag. Datoene beregnes automatisk hvert år.
 
 `state.json` lagrer fortsatt alle ledige netter. Filteret brukes bare når varselet lages.
+
+## Når nytt bookingår åpner
+
+DNT åpner som regel booking for neste år første arbeidsdag i november, til og med nyttårsaften året etter. Fra 1. oktober ser overvåkeren derfor også på neste år (`RELEASE_WATCH_MONTH`). Når over 30 netter åpner samtidig for én hytte (`RELEASE_THRESHOLD`), sendes én oppsummering, «Booking har åpnet», med antall ledige helgenetter og en liste over nettene før helligdager. Da slipper du en e-post med hundre linjer.
 
 Første gang en hytte sjekkes lagres bare tilstanden, uten varsel. Sett `NOTIFY_ON_FIRST_RUN=true` hvis du vil få varsel om alt som allerede er ledig.
 
