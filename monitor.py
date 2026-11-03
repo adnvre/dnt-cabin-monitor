@@ -137,6 +137,7 @@ def main() -> int:
     notify_first = os.environ.get("NOTIFY_ON_FIRST_RUN", "").lower() == "true"
     state = load_json(STATE_FILE, {})
     cabin_states = state.get("cabins", {})
+    prev_until = state.get("checked_until", "")
 
     today = date.today()
     end = today + timedelta(days=DAYS_AHEAD)
@@ -157,15 +158,17 @@ def main() -> int:
             print("    Første kjøring for denne hytta – lagrer tilstand uten varsel.")
             new = []
         else:
-            new = sorted(set(available) - set(prev or []))
+            # Bare datoer som var innenfor forrige vindu teller; datoer som
+            # nettopp har rullet inn i slutten av vinduet er ikke "avbestillinger".
+            new = sorted(d for d in set(available) - set(prev or []) if d <= prev_until)
         for d in new:
             print(f"    [NY] {d}")
         if new:
             openings[cid] = (cabin, new)
         cabin_states[cid] = available
 
-    # Ingen tidsstempel her: da endres state.json (og committes) bare når ledigheten endres.
-    state = {"cabins": cabin_states}
+    # Ingen tidsstempel her: da endres state.json bare når ledigheten endres (og én gang i døgnet).
+    state = {"checked_until": end.isoformat(), "cabins": cabin_states}
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     if openings:
