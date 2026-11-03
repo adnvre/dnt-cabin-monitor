@@ -11,6 +11,16 @@ Inspirert av [deagjerde/dnt-cabin-monitor](https://github.com/deagjerde/dnt-cabi
 3. Resultatet sammenlignes med `state.json`. Nye ledige netter gir én samlet e-post.
 4. `state.json` committes tilbake bare når ledigheten har endret seg.
 
+## Hvilke netter varsles
+
+Bare netter du faktisk vil ha:
+
+- **lørdag → søndag**
+- **fredag → lørdag** (slå av med `INCLUDE_FRIDAY = False` i `monitor.py`)
+- **natten før en norsk helligdag**: avreise dagen før, hjemreise på helligdagen. Gjelder nyttårsdag, skjærtorsdag, langfredag, 1. og 2. påskedag, 1. mai, 17. mai, Kristi himmelfartsdag, 1. og 2. pinsedag, og 1. og 2. juledag. Datoene beregnes automatisk hvert år.
+
+`state.json` lagrer fortsatt alle ledige netter. Filteret brukes bare når varselet lages.
+
 Første gang en hytte sjekkes lagres bare tilstanden, uten varsel. Sett `NOTIFY_ON_FIRST_RUN=true` hvis du vil få varsel om alt som allerede er ledig.
 
 ## Legge til hytter

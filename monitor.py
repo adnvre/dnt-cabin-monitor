@@ -3,7 +3,8 @@
 
 Sjekker ledige netter for hyttene i cabins.json via DNT sitt
 availability-calendar-API og sender e-post når en natt som var booket
-blir ledig.
+blir ledig. Varsler bare om helgenetter (lør–søn, fre–lør) og netten
+før en norsk helligdag.
 
 Miljøvariabler:
   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM, EMAIL_TO
@@ -28,6 +29,7 @@ API_URL = "https://hyttebestilling.dnt.no/api/booking/availability-calendar"
 CABIN_URL = "https://hyttebestilling.dnt.no/hytte/{id}"
 USER_AGENT = "Mozilla/5.0 (compatible; DNT-Monitor/1.0)"
 DAYS_AHEAD = 400  # ca. 13 måneder
+INCLUDE_FRIDAY = True  # varsle også om fredag–lørdag
 
 NO_MONTHS = [
     "januar", "februar", "mars", "april", "mai", "juni",
@@ -36,8 +38,65 @@ NO_MONTHS = [
 NO_WEEKDAYS = ["mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag", "søndag"]
 
 
-def format_no_date(d: date) -> str:
-    return f"{NO_WEEKDAYS[d.weekday()]} {d.day}. {NO_MONTHS[d.month - 1]} {d.year}"
+def format_no_date(d: date, with_year: bool = True) -> str:
+    s = f"{NO_WEEKDAYS[d.weekday()]} {d.day}. {NO_MONTHS[d.month - 1]}"
+    return f"{s} {d.year}" if with_year else s
+
+
+def format_night(d: date) -> str:
+    """Ankomst → avreise, f.eks. 'lørdag 5. desember → søndag 6. desember 2026'."""
+    dep = d + timedelta(days=1)
+    return f"{format_no_date(d, with_year=d.year != dep.year)} → {format_no_date(dep)}"
+
+
+def easter_sunday(year: int) -> date:
+    # Anonym gregoriansk algoritme (Meeus/Jones/Butcher)
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day = divmod(h + l - 7 * m + 114, 31)
+    return date(year, month, day + 1)
+
+
+def norwegian_holidays(year: int) -> dict[date, str]:
+    easter = easter_sunday(year)
+    holidays = {
+        date(year, 1, 1): "1. nyttårsdag",
+        date(year, 5, 1): "1. mai",
+        date(year, 5, 17): "17. mai",
+        date(year, 12, 25): "1. juledag",
+        date(year, 12, 26): "2. juledag",
+    }
+    for offset, name in [
+        (-3, "Skjærtorsdag"), (-2, "Langfredag"), (0, "1. påskedag"), (1, "2. påskedag"),
+        (39, "Kristi himmelfartsdag"), (49, "1. pinsedag"), (50, "2. pinsedag"),
+    ]:
+        d = easter + timedelta(days=offset)
+        holidays[d] = f"{holidays[d]} / {name}" if d in holidays else name  # f.eks. 17. mai 2027
+    return holidays
+
+
+def night_label(d: date) -> str | None:
+    """Hvorfor natten med ankomst d er interessant, eller None hvis den ikke er det."""
+    dep = d + timedelta(days=1)
+    holiday = norwegian_holidays(dep.year).get(dep)
+    if holiday:
+        return holiday
+    if d.weekday() == 5:
+        return "helg lør–søn"
+    if d.weekday() == 4 and INCLUDE_FRIDAY:
+        return "helg fre–lør"
+    return None
+
+
+def next_saturday(d: date) -> date:
+    return d + timedelta(days=(5 - d.weekday()) % 7 or 7)
 
 
 def fetch_available_dates(cabin_id: str, start: date, end: date) -> list[str]:
@@ -103,7 +162,10 @@ def build_email(openings: dict[str, tuple[dict, list[str]]]) -> tuple[str, str]:
 
     parts = []
     for cabin, dates in openings.values():
-        lines = "\n".join(f"  - {format_no_date(date.fromisoformat(d))}" for d in dates)
+        lines = "\n".join(
+            f"  - {format_night(date.fromisoformat(d))} ({night_label(date.fromisoformat(d))})"
+            for d in dates
+        )
         parts.append(
             f"{cabin['name']} ({len(dates)} ny(e)):\n{lines}\n"
             f"Bestill her: {CABIN_URL.format(id=cabin['id'])}\n"
@@ -130,7 +192,7 @@ def main() -> int:
 
     if os.environ.get("TEST_EMAIL", "").lower() == "true":
         print("[TEST] Sender test-e-post ...")
-        fake = {c["id"]: (c, [(date.today() + timedelta(days=7)).isoformat()]) for c in cabins}
+        fake = {c["id"]: (c, [next_saturday(date.today()).isoformat()]) for c in cabins}
         subject, body = build_email(fake)
         return 0 if send_email("[TEST] " + subject, body) else 1
 
@@ -162,7 +224,10 @@ def main() -> int:
             # nettopp har rullet inn i slutten av vinduet er ikke "avbestillinger".
             new = sorted(d for d in set(available) - set(prev or []) if d <= prev_until)
         for d in new:
-            print(f"    [NY] {d}")
+            label = night_label(date.fromisoformat(d))
+            print(f"    [NY] {d} ({label or 'ikke helg/helligdag, ignoreres'})")
+        # state.json lagrer alle ledige netter, men vi varsler bare om helger/helligdager.
+        new = [d for d in new if night_label(date.fromisoformat(d))]
         if new:
             openings[cid] = (cabin, new)
         cabin_states[cid] = available
