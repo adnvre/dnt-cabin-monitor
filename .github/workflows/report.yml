@@ -1,0 +1,64 @@
+name: DNT-rapport
+
+# Manuell rapport over alle ledige helgenetter og netter før helligdager.
+# Kryss av hyttene du vil ha med (ingen avkrysset = alle).
+# Ny hytte? Legg den til i cabins.json OG som en boks her (c<hytte-ID>).
+on:
+  workflow_dispatch:
+    inputs:
+      c101297:
+        description: 'Stallen'
+        type: boolean
+        default: false
+      c101209:
+        description: 'Fuglemyrhytta'
+        type: boolean
+        default: false
+      c101250514:
+        description: 'Svartvannskoia'
+        type: boolean
+        default: false
+      c10258893:
+        description: 'Fiskelaushytta'
+        type: boolean
+        default: false
+      c10785:
+        description: 'Røverhula'
+        type: boolean
+        default: false
+      c10772:
+        description: 'Bekkestua'
+        type: boolean
+        default: false
+      c101170963:
+        description: 'Damhytta'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build report
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SELECTED: ${{ toJSON(inputs) }}
+        run: python report.py

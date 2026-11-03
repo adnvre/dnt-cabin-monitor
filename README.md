@@ -27,6 +27,18 @@ DNT åpner som regel booking for neste år første arbeidsdag i november, til og
 
 Første gang en hytte sjekkes lagres bare tilstanden, uten varsel. Sett `NOTIFY_ON_FIRST_RUN=true` hvis du vil få varsel om alt som allerede er ledig.
 
+## Rapport over ledige helger
+
+Den manuelle jobben **DNT-rapport** lister *alle* ledige helgenetter og netter før helligdager, ikke bare nye:
+
+1. **Actions → DNT-rapport → Run workflow**
+2. Kryss av hyttene du vil se. Ingen avkrysset betyr alle.
+3. Rapporten sendes på e-post, sortert per dato, og vises også som tabell på kjøringssiden.
+
+Fra terminalen: `gh workflow run report.yml -f c101297=true -f c10772=true`
+
+Rapporten endrer ikke `state.json`, så den påvirker ikke varslene.
+
 ## Legge til hytter
 
 Finn ID-en i URL-en på hyttesiden, f.eks. `https://hyttebestilling.dnt.no/hytte/101209` → `101209`, og legg den inn i `cabins.json`:
@@ -37,6 +49,8 @@ Finn ID-en i URL-en på hyttesiden, f.eks. `https://hyttebestilling.dnt.no/hytte
   {"id": "123456", "name": "En annen hytte"}
 ]
 ```
+
+Legg også hytta til som avkrysningsboks i `.github/workflows/report.yml` (kopier en eksisterende `c<ID>`-blokk).
 
 ## Oppsett
 
